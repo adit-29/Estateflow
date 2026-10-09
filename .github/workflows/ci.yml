@@ -1,0 +1,83 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: estateflow
+          POSTGRES_PASSWORD: estateflow
+          POSTGRES_DB: estateflow_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U estateflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: local
+      DATABASE_URL: postgresql://estateflow:estateflow@localhost:5432/estateflow_test
+      TEST_DATABASE_URL: postgresql://estateflow:estateflow@localhost:5432/estateflow_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Secret scan (repository)
+        run: node scripts/check-secrets.mjs repo
+      - run: npm run build --workspace=@estateflow/shared
+      - run: npm run db:generate
+      - run: npx prisma migrate deploy
+        working-directory: apps/api
+      - name: Migrations match schema.prisma
+        working-directory: apps/api
+        run: |
+          PGPASSWORD=estateflow psql -h localhost -U estateflow -d estateflow_test -c 'CREATE DATABASE estateflow_shadow'
+          npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url postgresql://estateflow:estateflow@localhost:5432/estateflow_shadow --exit-code
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - name: Build API
+        run: npm run build --workspace=@estateflow/api
+      - name: Build web (production flags, no demo)
+        env:
+          NEXT_PUBLIC_APP_ENV: production
+          API_URL: https://api.example.invalid
+        run: npm run build --workspace=@estateflow/web
+      - name: Secret scan (client bundle)
+        run: node scripts/check-secrets.mjs bundle --production
+      - run: npm audit --audit-level=high
+        continue-on-error: true
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -recursive
+      # No backend and no credentials: validates syntax and references only. Never plans or applies.
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Build only. Nothing is pushed to a registry.
+      - run: docker build -f apps/api/Dockerfile -t estateflow-api:ci .
+      - run: docker build -f apps/web/Dockerfile --build-arg API_URL=https://api.example.invalid --build-arg NEXT_PUBLIC_APP_URL=https://app.example.invalid -t estateflow-web:ci .

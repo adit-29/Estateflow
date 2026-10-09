@@ -1,0 +1,1271 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  dealer
+  buyer
+  builder
+  seller
+}
+
+enum OnboardingStatus {
+  not_started
+  pending
+  verified
+  rejected
+}
+
+enum LeadStatus {
+  new
+  contacted
+  qualified
+  visit_scheduled
+  negotiation
+  won
+  lost
+  archived
+}
+
+enum LeadSource {
+  referral
+  portal
+  walk_in
+  social
+  builder_tie_up
+  other
+}
+
+enum PropertyType {
+  flat
+  builder_floor
+  plot
+  independent_house
+  commercial
+  land
+  other
+}
+
+enum TransactionType {
+  sale
+  rent
+  resale
+  new_project
+  investment
+}
+
+enum ListingStatus {
+  draft
+  active
+  paused
+  sold_rented
+  archived
+}
+
+enum FurnishingType {
+  unfurnished
+  semi_furnished
+  fully_furnished
+}
+
+enum AreaUnit {
+  sqft
+  sqm
+  sqyd
+}
+
+enum BuyerReadiness {
+  exploring
+  shortlisting
+  ready
+  on_hold
+}
+
+enum DealPipelineStage {
+  new_lead
+  qualified
+  site_visit
+  negotiation
+  booking
+  closed_won
+  closed_lost
+}
+
+enum DealStatus {
+  draft
+  active
+  closed_won
+  closed_lost
+  cancelled
+}
+
+enum SiteVisitStatus {
+  proposed
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+enum CommissionPaymentStatus {
+  pending
+  paid
+  overdue
+  disputed
+}
+
+enum CollaborationRole {
+  buyer_source
+  inventory_source
+  closing
+}
+
+enum ConnectionStatus {
+  pending
+  accepted
+  rejected
+  revoked
+}
+
+enum ShareResourceType {
+  property
+  lead
+  deal_collaboration
+}
+
+enum ReportTargetType {
+  dealer_profile
+  property_listing
+}
+
+enum ReportStatus {
+  open
+  under_review
+  resolved
+  dismissed
+}
+
+enum ActivityType {
+  note
+  call
+  email
+  status_change
+  visit
+  deal_update
+  system
+}
+
+enum MembershipRole {
+  owner
+  admin
+  member
+}
+
+model Account {
+  id               String           @id @default(uuid()) @db.Uuid
+  subjectId        String           @unique
+  email            String           @unique
+  role             UserRole         @default(dealer)
+  emailVerified    Boolean          @default(false)
+  platformAdmin    Boolean          @default(false)
+  onboardingStatus OnboardingStatus @default(not_started)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+
+  dealerProfile       DealerProfile?
+  auditEvents         AuditEvent[]
+  memberships         DealerMembership[]
+  assignedSiteVisits  SiteVisit[]          @relation("AssignedVisits")
+  responsibleDeals    Deal[]               @relation("ResponsibleDeals")
+  commissionChanges      CommissionAgreementHistory[]
+  splitAcceptances       CommissionSplit[]    @relation("SplitAcceptance")
+  sentInvites            DealerConnection[]   @relation("InviteSender")
+  reportsFiled           Report[]
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  builderMembership   BuilderMembership?
+
+  @@index([role])
+}
+
+model Agency {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  dealerProfiles   DealerProfile[]
+  memberships      DealerMembership[]
+  leads            Lead[]
+  buyers           BuyerRequirement[]
+  properties       Property[]
+  siteVisits       SiteVisit[]
+  deals            Deal[]
+  activities       Activity[]
+  sharedProperties PropertyNetworkShare[] @relation("SharedWithAgency")
+  ownedShares      PropertyNetworkShare[] @relation("OwnerAgency")
+  connectionsFrom  DealerConnection[]     @relation("ConnectionFrom")
+  connectionsTo    DealerConnection[]     @relation("ConnectionTo")
+  resourceSharesOwned   ResourceShare[] @relation("ResourceShareOwner")
+  resourceSharesReceived ResourceShare[] @relation("ResourceShareRecipient")
+  commissionSplits CommissionSplit[]
+  matchShortlists     MatchShortlist[]
+  draftMessages       MatchDraftMessage[]
+  notifications       Notification[]
+  reconstructionJobs  ReconstructionJob[]
+  tourShareLinks      TourShareLink[]
+}
+
+model DealerMembership {
+  id        String         @id @default(uuid()) @db.Uuid
+  agencyId  String         @db.Uuid
+  accountId String         @db.Uuid
+  role      MembershipRole @default(owner)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  agency  Agency  @relation(fields: [agencyId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([agencyId, accountId])
+  @@index([accountId])
+}
+
+model DealerProfile {
+  id                  String            @id @default(uuid()) @db.Uuid
+  accountId           String            @unique @db.Uuid
+  agencyId            String            @db.Uuid
+  fullName            String
+  mobile              String            @unique
+  email               String
+  operatingLocalities String[]
+  propertyTypes       PropertyType[]
+  transactionTypes    TransactionType[]
+  budgetBands         String[]
+  experienceBand      String
+  activeBuyerCount    Int               @default(0)
+  activePropertyCount Int               @default(0)
+  reraNumber          String?
+  reraRegistered      Boolean           @default(false)
+  onboardingComplete  Boolean           @default(false)
+  showInDirectory     Boolean           @default(true)
+  showLocalities      Boolean           @default(true)
+  showPropertyTypes   Boolean           @default(true)
+  showExperience      Boolean           @default(true)
+  showMobile          Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  deletedAt           DateTime?
+
+  account Account @relation(fields: [accountId], references: [id])
+  agency  Agency  @relation(fields: [agencyId], references: [id])
+
+  @@index([agencyId])
+  @@index([email])
+  @@index([showInDirectory])
+}
+
+model Lead {
+  id                  String           @id @default(uuid()) @db.Uuid
+  agencyId            String           @db.Uuid
+  name                String
+  phone               String
+  source              LeadSource
+  requirementSummary  String?
+  budgetBand          String?
+  preferredLocalities String[]
+  propertyType        PropertyType?
+  transactionType     TransactionType?
+  timeline            String?
+  financingNotes      String?
+  status              LeadStatus       @default(new)
+  nextFollowUpAt      DateTime?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  deletedAt           DateTime?
+
+  agency     Agency              @relation(fields: [agencyId], references: [id])
+  siteVisits SiteVisit[]
+  deals      Deal[]
+  activities Activity[]
+  buyers     BuyerRequirement[]
+
+  @@index([agencyId, status])
+  @@index([agencyId, nextFollowUpAt])
+  @@index([agencyId, createdAt])
+}
+
+model BuyerRequirement {
+  id               String            @id @default(uuid()) @db.Uuid
+  agencyId         String            @db.Uuid
+  leadId           String?           @db.Uuid
+  contactName      String
+  phone            String
+  localities       String[]
+  propertyTypes    PropertyType[]
+  bedroomsMin      Int?
+  bedroomsMax      Int?
+  budgetMin        Decimal?          @db.Decimal(14, 2)
+  budgetMax        Decimal?          @db.Decimal(14, 2)
+  transactionType  TransactionType
+  moveInTimeline   String?
+  readiness        BuyerReadiness    @default(exploring)
+  mustHaveCriteria String?
+  flexibleCriteria String?
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
+
+  agency     Agency            @relation(fields: [agencyId], references: [id])
+  lead       Lead?             @relation(fields: [leadId], references: [id])
+  siteVisits SiteVisit[]
+  deals      Deal[]
+  shortlists MatchShortlist[]
+  drafts     MatchDraftMessage[]
+
+  @@index([agencyId])
+  @@index([agencyId, createdAt])
+}
+
+model Property {
+  id               String          @id @default(uuid()) @db.Uuid
+  agencyId         String          @db.Uuid
+  title            String
+  locality         String
+  addressText      String?
+  propertyType     PropertyType
+  bedrooms         Int?
+  areaValue        Decimal?        @db.Decimal(12, 2)
+  areaUnit         AreaUnit?
+  priceAmount      Decimal?        @db.Decimal(14, 2)
+  furnishing       FurnishingType?
+  possessionNotes  String?
+  transactionType  TransactionType
+  sourceContact    String?
+  listingStatus    ListingStatus   @default(draft)
+  isVerifiedListing Boolean        @default(false)
+  photoUrls        String[]
+  lastConfirmedAt  DateTime?
+  notes            String?
+  budgetBand       String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+
+  agency       Agency                 @relation(fields: [agencyId], references: [id])
+  siteVisits   SiteVisit[]
+  deals        Deal[]
+  networkShares PropertyNetworkShare[]
+  shortlists         MatchShortlist[]
+  drafts             MatchDraftMessage[]
+  reconstructionJobs ReconstructionJob[]
+
+  @@index([agencyId, listingStatus])
+  @@index([agencyId, propertyType])
+  @@index([agencyId, locality])
+  @@index([listingStatus, propertyType, locality])
+  @@index([priceAmount])
+}
+
+model PropertyNetworkShare {
+  id               String    @id @default(uuid()) @db.Uuid
+  propertyId       String    @db.Uuid
+  ownerAgencyId    String    @db.Uuid
+  sharedWithAgencyId String  @db.Uuid
+  grantedAt        DateTime  @default(now())
+  revokedAt        DateTime?
+  grantedByAccountId String? @db.Uuid
+
+  property       Property @relation(fields: [propertyId], references: [id])
+  ownerAgency    Agency   @relation("OwnerAgency", fields: [ownerAgencyId], references: [id])
+  sharedWithAgency Agency @relation("SharedWithAgency", fields: [sharedWithAgencyId], references: [id])
+
+  @@unique([propertyId, sharedWithAgencyId])
+  @@index([sharedWithAgencyId, revokedAt])
+}
+
+model SiteVisit {
+  id                  String          @id @default(uuid()) @db.Uuid
+  agencyId            String          @db.Uuid
+  leadId              String?         @db.Uuid
+  buyerRequirementId  String?         @db.Uuid
+  propertyId          String?         @db.Uuid
+  assignedAccountId   String          @db.Uuid
+  scheduledAt         DateTime
+  meetingPoint        String
+  status              SiteVisitStatus @default(proposed)
+  buyerFeedback       String?
+  nextAction          String?
+  notes               String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  deletedAt           DateTime?
+
+  agency           Agency            @relation(fields: [agencyId], references: [id])
+  lead             Lead?             @relation(fields: [leadId], references: [id])
+  buyerRequirement BuyerRequirement? @relation(fields: [buyerRequirementId], references: [id])
+  property         Property?         @relation(fields: [propertyId], references: [id])
+  assignedAccount  Account           @relation("AssignedVisits", fields: [assignedAccountId], references: [id])
+
+  @@index([agencyId, scheduledAt])
+  @@index([assignedAccountId, scheduledAt])
+  @@index([agencyId, status])
+}
+
+model Deal {
+  id                    String            @id @default(uuid()) @db.Uuid
+  agencyId              String            @db.Uuid
+  leadId                String?           @db.Uuid
+  buyerRequirementId    String?           @db.Uuid
+  propertyId            String?           @db.Uuid
+  responsibleAccountId  String?           @db.Uuid
+  title                 String
+  value                 Decimal?          @db.Decimal(14, 2)
+  expectedCloseDate     DateTime?
+  pipelineStage         DealPipelineStage @default(new_lead)
+  status                DealStatus        @default(draft)
+  source                String?
+  nextAction            String?
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deletedAt             DateTime?
+
+  agency              Agency                @relation(fields: [agencyId], references: [id])
+  lead                Lead?                 @relation(fields: [leadId], references: [id])
+  buyerRequirement    BuyerRequirement?     @relation(fields: [buyerRequirementId], references: [id])
+  property            Property?             @relation(fields: [propertyId], references: [id])
+  responsibleAccount  Account?              @relation("ResponsibleDeals", fields: [responsibleAccountId], references: [id])
+  commission          CommissionAgreement?
+  stageHistory        DealStageHistory[]
+  commissionSplits    CommissionSplit[]
+
+  @@index([agencyId, pipelineStage])
+  @@index([agencyId, status])
+}
+
+model DealStageHistory {
+  id        String            @id @default(uuid()) @db.Uuid
+  dealId    String            @db.Uuid
+  fromStage DealPipelineStage?
+  toStage   DealPipelineStage
+  accountId String?           @db.Uuid
+  createdAt DateTime          @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id])
+
+  @@index([dealId, createdAt])
+}
+
+model CommissionAgreement {
+  id            String                  @id @default(uuid()) @db.Uuid
+  dealId        String                  @unique @db.Uuid
+  percentage    Decimal?                @db.Decimal(5, 2)
+  fixedAmount   Decimal?                @db.Decimal(14, 2)
+  payerSource   String?
+  paymentStatus CommissionPaymentStatus @default(pending)
+  dueDate       DateTime?
+  demoLegalAck  Boolean                 @default(false)
+  notes         String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  deal    Deal                           @relation(fields: [dealId], references: [id])
+  history CommissionAgreementHistory[]
+  splits  CommissionSplit[]
+}
+
+model CommissionAgreementHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  agreementId  String   @db.Uuid
+  accountId    String?  @db.Uuid
+  changeSummary String
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  agreement CommissionAgreement @relation(fields: [agreementId], references: [id])
+  account   Account?            @relation(fields: [accountId], references: [id])
+}
+
+model CommissionSplit {
+  id          String            @id @default(uuid()) @db.Uuid
+  agreementId String            @db.Uuid
+  dealId      String            @db.Uuid
+  agencyId    String            @db.Uuid
+  role        CollaborationRole
+  percentage  Decimal           @db.Decimal(5, 2)
+  acceptedAt  DateTime?
+  acceptedByAccountId String?   @db.Uuid
+  proposedAt  DateTime          @default(now())
+
+  agreement   CommissionAgreement @relation(fields: [agreementId], references: [id])
+  deal        Deal                @relation(fields: [dealId], references: [id])
+  agency      Agency              @relation(fields: [agencyId], references: [id])
+  acceptedBy  Account?            @relation("SplitAcceptance", fields: [acceptedByAccountId], references: [id])
+
+  @@unique([agreementId, agencyId, role])
+}
+
+model MatchShortlist {
+  id                 String   @id @default(uuid()) @db.Uuid
+  agencyId           String   @db.Uuid
+  buyerRequirementId String   @db.Uuid
+  propertyId         String   @db.Uuid
+  matchPercent       Int
+  breakdown          Json
+  createdAt          DateTime @default(now())
+
+  agency           Agency           @relation(fields: [agencyId], references: [id])
+  buyerRequirement BuyerRequirement @relation(fields: [buyerRequirementId], references: [id])
+  property         Property         @relation(fields: [propertyId], references: [id])
+
+  @@unique([agencyId, buyerRequirementId, propertyId])
+  @@index([agencyId, matchPercent])
+}
+
+model MatchDraftMessage {
+  id                 String   @id @default(uuid()) @db.Uuid
+  agencyId           String   @db.Uuid
+  buyerRequirementId String   @db.Uuid
+  propertyId         String   @db.Uuid
+  draftText          String
+  createdAt          DateTime @default(now())
+
+  agency           Agency           @relation(fields: [agencyId], references: [id])
+  buyerRequirement BuyerRequirement @relation(fields: [buyerRequirementId], references: [id])
+  property         Property         @relation(fields: [propertyId], references: [id])
+}
+
+model DealerConnection {
+  id              String           @id @default(uuid()) @db.Uuid
+  fromAgencyId    String           @db.Uuid
+  toAgencyId      String?          @db.Uuid
+  inviteeEmail    String?
+  inviteePhone    String?
+  status          ConnectionStatus @default(pending)
+  invitedByAccountId String        @db.Uuid
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  fromAgency   Agency          @relation("ConnectionFrom", fields: [fromAgencyId], references: [id])
+  toAgency     Agency?         @relation("ConnectionTo", fields: [toAgencyId], references: [id])
+  invitedBy    Account         @relation("InviteSender", fields: [invitedByAccountId], references: [id])
+  resourceShares ResourceShare[]
+
+  @@index([fromAgencyId, status])
+  @@index([toAgencyId, status])
+  @@index([inviteeEmail])
+}
+
+model ResourceShare {
+  id                 String            @id @default(uuid()) @db.Uuid
+  connectionId       String            @db.Uuid
+  ownerAgencyId      String            @db.Uuid
+  sharedWithAgencyId String            @db.Uuid
+  resourceType       ShareResourceType
+  resourceId         String            @db.Uuid
+  grantedAt          DateTime          @default(now())
+  revokedAt          DateTime?
+
+  connection         DealerConnection @relation(fields: [connectionId], references: [id])
+  ownerAgency        Agency           @relation("ResourceShareOwner", fields: [ownerAgencyId], references: [id])
+  sharedWithAgency   Agency           @relation("ResourceShareRecipient", fields: [sharedWithAgencyId], references: [id])
+
+  @@index([sharedWithAgencyId, resourceType, resourceId])
+  @@index([ownerAgencyId])
+}
+
+model Report {
+  id           String           @id @default(uuid()) @db.Uuid
+  reporterAccountId String      @db.Uuid
+  targetType   ReportTargetType
+  targetId     String           @db.Uuid
+  reason       String
+  status       ReportStatus     @default(open)
+  adminNotes   String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  reporter Account @relation(fields: [reporterAccountId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+model Activity {
+  id        String       @id @default(uuid()) @db.Uuid
+  agencyId  String       @db.Uuid
+  leadId    String?      @db.Uuid
+  type      ActivityType
+  title     String
+  body      String?
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+  lead   Lead?  @relation(fields: [leadId], references: [id])
+
+  @@index([agencyId, leadId, createdAt])
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String?  @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+}
+
+model LocalAuthCredential {
+  subjectId      String    @id
+  email          String    @unique
+  passwordHash   String
+  verifyCode     String?
+  resetTokenHash String?
+  resetExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+enum MessagingChannel {
+  whatsapp
+  instagram
+  facebook_messenger
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum ChannelConnectionState {
+  not_connected
+  setup_required
+  connected
+  error
+}
+
+model ChannelConnection {
+  id             String                 @id @default(uuid()) @db.Uuid
+  agencyId       String                 @db.Uuid
+  channel        MessagingChannel
+  state          ChannelConnectionState @default(not_connected)
+  displayName       String?
+  externalAccountId String?
+  lastEventAt       DateTime?
+  secretRef         String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  conversations Conversation[]
+
+  @@unique([agencyId, channel])
+  @@unique([channel, externalAccountId])
+  @@index([agencyId])
+}
+
+model Conversation {
+  id          String           @id @default(uuid()) @db.Uuid
+  agencyId    String           @db.Uuid
+  connectionId String?         @db.Uuid
+  channel     MessagingChannel
+  externalId  String
+  contactName String
+  unread      Boolean          @default(true)
+  leadId      String?          @db.Uuid
+  optOut      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  connection  ChannelConnection? @relation(fields: [connectionId], references: [id])
+  messages    Message[]
+  assignments ConversationAssignment[]
+  reminders   FollowUpReminder[]
+  preference  CommunicationPreference?
+
+  @@unique([agencyId, channel, externalId])
+  @@index([agencyId, updatedAt])
+}
+
+model Message {
+  id                String           @id @default(uuid()) @db.Uuid
+  agencyId          String           @db.Uuid
+  conversationId    String           @db.Uuid
+  providerMessageId String?
+  direction         MessageDirection
+  senderLabel       String?
+  text              String
+  deliveryStatus    String?
+  eventAt           DateTime
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id])
+  attachments  MessageAttachment[]
+
+  @@unique([agencyId, providerMessageId])
+  @@index([conversationId, eventAt])
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  agencyId  String   @db.Uuid
+  messageId String   @db.Uuid
+  kind      String
+  label     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id])
+
+  @@index([agencyId, messageId])
+}
+
+model WebhookEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  agencyId         String?  @db.Uuid
+  channel          MessagingChannel
+  providerEventKey String   @unique
+  processedAt      DateTime @default(now())
+
+  @@index([channel, processedAt])
+}
+
+model ConversationAssignment {
+  id             String   @id @default(uuid()) @db.Uuid
+  agencyId       String   @db.Uuid
+  conversationId String   @db.Uuid
+  accountId      String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([agencyId, conversationId])
+}
+
+model CommunicationPreference {
+  id             String   @id @default(uuid()) @db.Uuid
+  agencyId       String   @db.Uuid
+  conversationId String   @unique @db.Uuid
+  optedOut       Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([agencyId])
+}
+
+model FollowUpReminder {
+  id             String    @id @default(uuid()) @db.Uuid
+  agencyId       String    @db.Uuid
+  conversationId String    @db.Uuid
+  dueAt          DateTime
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([agencyId, dueAt])
+}
+
+enum NotificationKind {
+  reminder
+  visit_change
+  shared_inventory
+  collaboration_request
+}
+
+enum ReconstructionStatus {
+  no_tour
+  video_required
+  video_uploaded
+  processing_requested
+  processing
+  ready
+  failed
+  unavailable
+  draft
+  uploading
+  queued
+  needs_more_footage
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  agencyId   String           @db.Uuid
+  accountId  String           @db.Uuid
+  kind       NotificationKind
+  title      String
+  body       String
+  readAt     DateTime?
+  dedupeKey  String
+  createdAt  DateTime         @default(now())
+
+  agency     Agency                 @relation(fields: [agencyId], references: [id])
+  account    Account                @relation(fields: [accountId], references: [id])
+  deliveries NotificationDelivery[]
+
+  @@unique([agencyId, dedupeKey])
+  @@index([accountId, createdAt])
+  @@index([accountId, readAt])
+}
+
+enum DeliveryChannel {
+  email
+  sms
+  push
+}
+
+enum DeliveryStatus {
+  pending
+  sent
+  failed
+  dismissed
+}
+
+model NotificationDelivery {
+  id             String          @id @default(uuid()) @db.Uuid
+  agencyId       String          @db.Uuid
+  notificationId String          @db.Uuid
+  channel        DeliveryChannel
+  status         DeliveryStatus  @default(pending)
+  attempts       Int             @default(0)
+  lastError      String?
+  idempotencyKey String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id])
+
+  @@unique([agencyId, idempotencyKey])
+  @@index([agencyId, status])
+}
+
+model CopilotUsage {
+  id          String   @id @default(uuid()) @db.Uuid
+  agencyId    String   @db.Uuid
+  accountId   String   @db.Uuid
+  tool        String?
+  outcome     String
+  latencyMs   Int
+  promptChars Int
+  createdAt   DateTime @default(now())
+
+  @@index([agencyId, createdAt])
+  @@index([accountId, createdAt])
+}
+
+model NotificationPreference {
+  id                     String   @id @default(uuid()) @db.Uuid
+  accountId              String   @unique @db.Uuid
+  reminders              Boolean  @default(true)
+  visitChanges           Boolean  @default(true)
+  sharedInventory        Boolean  @default(true)
+  collaborationRequests  Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model TourShareLink {
+  id                 String            @id @default(uuid()) @db.Uuid
+  agencyId           String            @db.Uuid
+  jobId              String            @db.Uuid
+  tokenHash          String            @unique
+  expiresAt          DateTime
+  revokedAt          DateTime?
+  viewCount          Int               @default(0)
+  lastViewedAt       DateTime?
+  createdByAccountId String            @db.Uuid
+  createdAt          DateTime          @default(now())
+
+  agency Agency            @relation(fields: [agencyId], references: [id])
+  job    ReconstructionJob @relation(fields: [jobId], references: [id])
+
+  @@index([agencyId, jobId])
+}
+
+model ReconstructionJob {
+  id               String               @id @default(uuid()) @db.Uuid
+  agencyId         String               @db.Uuid
+  propertyId       String               @db.Uuid
+  uploadObjectKey  String?
+  provider         String
+  providerJobRef   String?
+  status           ReconstructionStatus
+  errorCategory    String?
+  resultAssetUrl   String?
+  approvedAt       DateTime?
+  publishedAt      DateTime?
+  retentionUntil   DateTime?
+  idempotencyKey   String
+  fileName         String?
+  mimeType         String?
+  sizeBytes        BigInt?
+  durationSeconds  Int?
+  captureNotes     String?
+  consentAt        DateTime?
+  consentAccountId String?              @db.Uuid
+  uploadedAt       DateTime?
+  progress         Int?
+  providerMessage  String?
+  resultModelKey   String?
+  attachedAt       DateTime?
+  createdByAccountId String?            @db.Uuid
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  agency     Agency          @relation(fields: [agencyId], references: [id])
+  property   Property        @relation(fields: [propertyId], references: [id])
+  shareLinks TourShareLink[]
+
+  @@unique([agencyId, idempotencyKey])
+  @@index([providerJobRef])
+  @@index([agencyId, propertyId, createdAt])
+  @@index([agencyId, status])
+}
+
+model BuilderOrganization {
+  id                    String   @id @default(uuid()) @db.Uuid
+  name                  String
+  assignmentMode        String   @default("recommended")
+  responseWindowMinutes Int      @default(15)
+  maxReassignments      Int      @default(2)
+  notificationPrefs     Json     @default("{}")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  memberships BuilderMembership[]
+  projects    BuilderProject[]
+  towers      BuilderTower[]
+  floors      BuilderFloor[]
+  units       BuilderUnit[]
+  media       BuilderMedia[]
+  tours       BuilderTourJob[]
+  dealers     BuilderNetworkDealer[]
+  groups      BuilderDealerGroup[]
+  access      DealerProjectAccess[]
+  leads       BuilderLead[]
+  assignments BuilderAssignment[]
+  events      BuilderWorkspaceEvent[]
+}
+
+model BuilderMembership {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  accountId      String   @unique @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  account      Account             @relation(fields: [accountId], references: [id])
+
+  @@index([organizationId])
+}
+
+model BuilderProject {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @db.Uuid
+  name               String
+  projectType        String
+  developerName      String
+  city               String
+  locality           String
+  address            String   @default("")
+  description        String   @default("")
+  reraNumber         String?
+  constructionStatus String
+  possessionDate     String?
+  amenities          String[]
+  visibility         String   @default("private")
+  status             String   @default("draft")
+  latitude           Float?
+  longitude          Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  towers       BuilderTower[]
+  floors       BuilderFloor[]
+  units        BuilderUnit[]
+  media        BuilderMedia[]
+  tours        BuilderTourJob[]
+  access       DealerProjectAccess[]
+  leads        BuilderLead[]
+
+  @@index([organizationId])
+}
+
+model BuilderTower {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId      String @db.Uuid
+  name           String
+  sortOrder      Int    @default(0)
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+  floors       BuilderFloor[]
+  units        BuilderUnit[]
+
+  @@index([organizationId, projectId])
+}
+
+model BuilderFloor {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  projectId      String @db.Uuid
+  towerId        String @db.Uuid
+  label          String
+  level          Int
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+  tower        BuilderTower        @relation(fields: [towerId], references: [id])
+  units        BuilderUnit[]
+
+  @@index([organizationId, towerId])
+}
+
+model BuilderUnit {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @db.Uuid
+  projectId         String    @db.Uuid
+  towerId           String    @db.Uuid
+  floorId           String    @db.Uuid
+  unitNumber        String
+  configuration     String
+  bedrooms          Int
+  bathrooms         Int
+  carpetAreaSqft    Float
+  saleableAreaSqft  Float
+  facing            String    @default("")
+  balcony           Boolean   @default(false)
+  parking           String    @default("")
+  basePrice         Int
+  additionalCharges Int       @default(0)
+  plc               Int       @default(0)
+  otherCharges      Int       @default(0)
+  availability      String
+  holdExpiresAt     DateTime?
+  bookingStatus     String?
+  lastConfirmedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+  tower        BuilderTower        @relation(fields: [towerId], references: [id])
+  floor        BuilderFloor        @relation(fields: [floorId], references: [id])
+
+  @@unique([projectId, unitNumber])
+  @@index([organizationId, projectId])
+  @@index([organizationId, availability])
+}
+
+model BuilderMedia {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  projectId        String   @db.Uuid
+  unitId           String?
+  kind             String
+  category         String
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  durationSeconds  Int?
+  storage          String
+  objectKey        String?
+  visibility       String
+  isPrimary        Boolean  @default(false)
+  sortOrder        Int      @default(0)
+  processingStatus String
+  uploadedByName   String
+  createdAt        DateTime @default(now())
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+
+  @@index([organizationId, projectId])
+}
+
+model BuilderTourJob {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @db.Uuid
+  projectId       String    @db.Uuid
+  unitId          String?
+  source          String
+  status          String
+  fileName        String?
+  mimeType        String?
+  sizeBytes       Int?
+  durationSeconds Int?
+  consentAt       DateTime?
+  demoSimulation  Boolean   @default(false)
+  provider        String    @default("none")
+  providerJobRef  String?
+  progress        Int?
+  providerMessage String?
+  resultKind      String?
+  resultAssetKey  String?
+  resultVersion   String?
+  resultCreatedAt DateTime?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+
+  @@index([organizationId, status])
+}
+
+model BuilderNetworkDealer {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @db.Uuid
+  name                String
+  agencyName          String
+  active              Boolean   @default(true)
+  suspended           Boolean   @default(false)
+  verified            Boolean   @default(false)
+  localities          String[]
+  nearbyLocalities    String[]
+  propertyTypes       String[]
+  configurations      String[]
+  transactionTypes    String[]
+  budgetMin           Int?
+  budgetMax           Int?
+  optedOutLeadTypes   String[]
+  openLeads           Int       @default(0)
+  capacity            Int       @default(5)
+  responsesInWindow   Int       @default(0)
+  assignmentsInWindow Int       @default(0)
+  responseWindowDays  Int       @default(30)
+  preferredProjectIds String[]
+  lastActivityAt      DateTime?
+  platformDealerId    String?
+  agencyId            String?   @db.Uuid
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([agencyId])
+}
+
+model BuilderDealerGroup {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  campaignName   String?
+  dealerIds      String[]
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+model DealerProjectAccess {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  projectId      String    @db.Uuid
+  dealerId       String
+  towerId        String?
+  unitId         String?
+  campaignName   String?
+  permissions    String[]
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+
+  @@index([organizationId, projectId])
+  @@index([dealerId])
+}
+
+model BuilderLead {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @db.Uuid
+  projectId        String    @db.Uuid
+  unitId           String?
+  buyerName        String
+  phone            String    @default("")
+  budgetMin        Int
+  budgetMax        Int
+  bedrooms         Int
+  configuration    String
+  transactionType  String
+  locality         String
+  propertyType     String
+  requirementNote  String    @default("")
+  stage            String
+  visitAt          DateTime?
+  visitOutcome     String?
+  firstContactAt   DateTime?
+  bookingStatus    String?
+  commissionStatus String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  project      BuilderProject      @relation(fields: [projectId], references: [id])
+  assignments  BuilderAssignment[]
+  events       BuilderWorkspaceEvent[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, stage])
+}
+
+model BuilderAssignment {
+  id                    String    @id @default(uuid()) @db.Uuid
+  organizationId        String    @db.Uuid
+  leadId                String    @db.Uuid
+  dealerId              String
+  dealerName            String
+  score                 Int
+  factors               Json
+  weights               Json
+  mode                  String
+  status                String
+  responseWindowMinutes Int
+  assignedAt            DateTime
+  respondedAt           DateTime?
+  declineReason         String?
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  lead         BuilderLead         @relation(fields: [leadId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([leadId, assignedAt])
+}
+
+model BuilderWorkspaceEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  leadId         String?  @db.Uuid
+  at             DateTime
+  kind           String
+  entity         String
+  entityId       String
+  detail         String
+  actor          String?
+
+  organization BuilderOrganization @relation(fields: [organizationId], references: [id])
+  lead         BuilderLead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, at])
+}

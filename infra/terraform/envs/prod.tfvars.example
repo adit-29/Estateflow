@@ -1,0 +1,22 @@
+# Copy to prod.tfvars (gitignored) and replace REPLACE_* placeholders. Never put secrets in this file.
+environment         = "prod"
+region              = "REPLACE_REGION"
+domain_name         = "REPLACE_DOMAIN"
+api_domain_name     = "api.REPLACE_DOMAIN"
+certificate_arn     = "arn:aws:acm:REPLACE_REGION:REPLACE_ACCOUNT:certificate/REPLACE_CERT"
+web_image           = "REPLACE_ACCOUNT.dkr.ecr.REPLACE_REGION.amazonaws.com/estateflow-web:REPLACE_TAG"
+api_image           = "REPLACE_ACCOUNT.dkr.ecr.REPLACE_REGION.amazonaws.com/estateflow-api:REPLACE_TAG"
+app_version         = "REPLACE_TAG"
+alarm_email         = "alerts@REPLACE_DOMAIN"
+db_instance_class   = "db.t4g.medium"
+db_multi_az         = true
+deletion_protection = true
+# prod must be "cognito"; the API refuses to start otherwise. Cognito sign-in is not implemented yet.
+auth_provider       = "cognito"
+# Leave false until a worker consumes SQS.
+enable_job_queue    = false
+# Non-secret settings only. Secrets go in the estateflow/prod/app secret.
+api_config = {
+  AI_PROVIDER             = "mock"
+  RECONSTRUCTION_PROVIDER = "none"
+}

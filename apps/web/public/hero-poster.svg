@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="EstateFlow property walkthrough fallback">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c2b33"/>
+      <stop offset="1" stop-color="#0f171b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <rect x="80" y="220" width="620" height="520" fill="#2c3b40"/>
+  <rect x="120" y="270" width="180" height="140" fill="#d7c4a3"/>
+  <rect x="330" y="270" width="180" height="140" fill="#c9b496"/>
+  <rect x="540" y="270" width="120" height="140" fill="#b7c4b0"/>
+  <rect x="120" y="440" width="540" height="240" fill="#3d4c4f"/>
+  <rect x="780" y="180" width="740" height="560" fill="#243238"/>
+  <rect x="830" y="230" width="280" height="200" fill="#e8d7b8"/>
+  <rect x="1140" y="230" width="320" height="200" fill="#8ea39a"/>
+  <rect x="830" y="460" width="630" height="230" fill="#314247"/>
+  <text x="120" y="860" fill="#d7c4a3" font-size="28" font-family="Georgia, serif">Property walkthrough poster  no video is bundled</text>
+</svg>

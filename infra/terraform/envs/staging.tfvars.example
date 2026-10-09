@@ -1,0 +1,22 @@
+# Copy to staging.tfvars (gitignored) and replace REPLACE_* placeholders. Never put secrets in this file.
+environment         = "staging"
+region              = "REPLACE_REGION"
+domain_name         = "staging.REPLACE_DOMAIN"
+api_domain_name     = "api.staging.REPLACE_DOMAIN"
+certificate_arn     = "arn:aws:acm:REPLACE_REGION:REPLACE_ACCOUNT:certificate/REPLACE_CERT"
+web_image           = "REPLACE_ACCOUNT.dkr.ecr.REPLACE_REGION.amazonaws.com/estateflow-web:REPLACE_TAG"
+api_image           = "REPLACE_ACCOUNT.dkr.ecr.REPLACE_REGION.amazonaws.com/estateflow-api:REPLACE_TAG"
+app_version         = "REPLACE_TAG"
+alarm_email         = "alerts@REPLACE_DOMAIN"
+db_instance_class   = "db.t4g.small"
+db_multi_az         = false
+deletion_protection = false
+# prod must be "cognito"; the API refuses to start otherwise. Cognito sign-in is not implemented yet.
+auth_provider       = "local"
+# Leave false until a worker consumes SQS.
+enable_job_queue    = false
+# Non-secret settings only. Secrets go in the estateflow/staging/app secret.
+api_config = {
+  AI_PROVIDER             = "mock"
+  RECONSTRUCTION_PROVIDER = "none"
+}
